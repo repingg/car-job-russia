@@ -1505,80 +1505,219 @@
 
 <script>
 // ===================================================
-// ДАННЫЕ ВАКАНСИЙ (пока статичные, потом будут из БД)
+// ПОДКЛЮЧЕНИЕ К БАЗЕ ДАННЫХ SUPABASE
+// Объяснение: эти две строки — "адрес" и "ключ" нашей
+// базы данных. Сайт использует их чтобы получать вакансии.
 // ===================================================
-const jobs = [
-  {
-    title: 'Мастер детейлинга (Senior)',
-    company: 'AutoSpa Premium', icon: '🚗',
-    salary: '120–150 000 ₽', location: 'Москва, Центральный р-н',
-    tags: ['Опыт 3+ лет', 'Полный день', 'PPF', 'Керамика'],
-    desc: 'Ищем опытного детейлера для работы в премиальном центре. Клиенты — владельцы суперкаров и ретро-автомобилей. Ferrari, Lamborghini, Porsche.',
-    reqs: ['Опыт в детейлинге от 3 лет', 'Знание химии: Koch, Gyeon, CarPro', 'Умение работать с керамическими покрытиями', 'Опыт полировки кузова (DA и ротор)']
-  },
-  {
-    title: 'Специалист по оклейке PPF / винил',
-    company: 'PremiumFilm SPB', icon: '🛡️',
-    salary: '90–120 000 ₽', location: 'Санкт-Петербург',
-    tags: ['PPF', 'Vinyl wrap', 'График 5/2'],
-    desc: 'Студия оклейки в Санкт-Петербурге. Работаем с XPEL, SunTek, 3M. Возможно обучение с нуля для кандидатов с потенциалом.',
-    reqs: ['Опыт оклейки от 1 года (желательно)', 'Аккуратность в работе с плёнками', 'Знание технологий cold/heat lamination']
-  },
-  {
-    title: 'PDR-мастер (удаление вмятин без покраски)',
-    company: 'DentMaster', icon: '🔨',
-    salary: 'до 150 000 ₽', location: 'Краснодар',
-    tags: ['PDR', 'Сдельно', 'Высокий доход'],
-    desc: 'Крупнейший PDR-центр Краснодара. Загрузка 100%, сдельная оплата. Топовые мастера зарабатывают 130–150 тыс в месяц.',
-    reqs: ['Опыт PDR от 2 лет', 'Владение техниками glue pull и традиционным PDR', 'Наличие собственного инструмента (желательно)']
-  },
-  {
-    title: 'Маляр — покраска дисков и суппортов',
-    company: 'DiskColor', icon: '🎨',
-    salary: '80–110 000 ₽', location: 'Екатеринбург',
-    tags: ['Покраска', 'Порошковая', 'Жидкая резина'],
-    desc: 'Специализированный сервис по покраске дисков. Полный цикл: пескоструй → грунт → покраска → лак.',
-    reqs: ['Опыт покраски от 1 года', 'Знание порошковой покраски', 'Умение работать с пескоструйным аппаратом']
-  },
-  {
-    title: 'Мастер тонировки и бронеплёнок',
-    company: 'TintPro', icon: '🪟',
-    salary: '70–95 000 ₽', location: 'Москва, ЮВАО',
-    tags: ['Тонировка', 'Бронеплёнка', 'Без опыта'],
-    desc: 'Берём кандидатов без опыта! Полное обучение тонировке и оклейке бронеплёнкой за счёт компании.',
-    reqs: ['Желание учиться и развиваться', 'Аккуратность и внимательность', 'Опыт не обязателен']
+const SUPABASE_URL = 'https://hqisjaptnqzwfwvghhrn.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxaXNqYXB0bmd6d2Z3dmdoaHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NTE0OTIsImV4cCI6MjA4ODIyNzQ5Mn0.dmZD5RjNQljbdEiESm-DBbaX1JdVfsxkvjDSd1GK6hw';
+
+// Иконки для категорий — чтобы карточки выглядели красиво
+const categoryIcons = {
+  'Детейлинг': '✨',
+  'Оклейка / PPF': '🛡️',
+  'PDR / Рихтовка': '🔨',
+  'Покраска дисков': '🎨',
+  'Тонировка': '🪟',
+  'Полировка': '💿',
+  'Шумоизоляция': '🔇',
+  'Автоэлектрик': '⚡',
+};
+
+// Здесь будем хранить загруженные вакансии
+let allJobs = [];
+
+// ===================================================
+// ЗАГРУЗКА ВАКАНСИЙ ИЗ БАЗЫ ДАННЫХ
+// Объяснение: эта функция обращается к Supabase,
+// берёт все вакансии и показывает их на сайте.
+// Если база пустая — показываем демо-вакансии.
+// ===================================================
+async function loadJobs() {
+  const list = document.getElementById('jobsList');
+
+  // Показываем индикатор загрузки
+  list.innerHTML = `
+    <div style="text-align:center;padding:40px;color:var(--muted)">
+      <div style="font-size:24px;margin-bottom:10px">⏳</div>
+      <div style="font-size:14px">Загружаем вакансии...</div>
+    </div>
+  `;
+
+  try {
+    // Запрос к базе данных
+    const url = `${SUPABASE_URL}/rest/v1/vacancies?select=*&order=created_at.desc`;
+    console.log('Запрашиваем:', url);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      }
+    });
+
+    console.log('Статус ответа:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log('Ошибка от сервера:', errorText);
+      showDemoJobs();
+      return;
+    }
+
+    const data = await response.json();
+    console.log('Получено вакансий:', data.length);
+    allJobs = data;
+
+    if (data.length === 0) {
+      showDemoJobs();
+    } else {
+      renderJobs(data);
+    }
+
+  } catch (error) {
+    console.log('Ошибка загрузки:', error);
+    showDemoJobs();
   }
-];
+}
+
+// ===================================================
+// ДЕМО-ВАКАНСИИ (показываются пока база пустая)
+// ===================================================
+function showDemoJobs() {
+  const demoJobs = [
+    { id:1, title:'Мастер детейлинга (Senior)', company:'AutoSpa Premium', salary_from:120000, salary_to:150000, city:'Москва', category:'Детейлинг', description:'Ищем опытного детейлера для работы в премиальном центре. Клиенты — владельцы суперкаров и ретро-автомобилей.', requirements:'Опыт от 3 лет\nЗнание химии: Koch, Gyeon, CarPro\nОпыт полировки кузова', source_name:'Демо', created_at: new Date().toISOString() },
+    { id:2, title:'Специалист по оклейке PPF / винил', company:'PremiumFilm SPB', salary_from:90000, salary_to:120000, city:'Санкт-Петербург', category:'Оклейка / PPF', description:'Студия оклейки в Санкт-Петербурге. Работаем с XPEL, SunTek, 3M.', requirements:'Опыт оклейки от 1 года\nАккуратность в работе с плёнками', source_name:'Демо', created_at: new Date().toISOString() },
+    { id:3, title:'PDR-мастер (удаление вмятин без покраски)', company:'DentMaster', salary_from:null, salary_to:150000, city:'Краснодар', category:'PDR / Рихтовка', description:'Крупнейший PDR-центр Краснодара. Загрузка 100%, сдельная оплата.', requirements:'Опыт PDR от 2 лет\nВладение техниками glue pull', source_name:'Демо', created_at: new Date().toISOString() },
+    { id:4, title:'Маляр — покраска дисков и суппортов', company:'DiskColor', salary_from:80000, salary_to:110000, city:'Екатеринбург', category:'Покраска дисков', description:'Специализированный сервис по покраске дисков. Полный цикл: пескоструй → грунт → покраска → лак.', requirements:'Опыт покраски от 1 года\nЗнание порошковой покраски', source_name:'Демо', created_at: new Date().toISOString() },
+    { id:5, title:'Мастер тонировки и бронеплёнок', company:'TintPro', salary_from:70000, salary_to:95000, city:'Москва', category:'Тонировка', description:'Берём кандидатов без опыта! Полное обучение за счёт компании.', requirements:'Желание учиться\nАккуратность', source_name:'Демо', created_at: new Date().toISOString() },
+  ];
+  allJobs = demoJobs;
+  renderJobs(demoJobs);
+}
+
+// ===================================================
+// ОТРИСОВКА КАРТОЧЕК ВАКАНСИЙ
+// Объяснение: берём данные из базы и превращаем
+// их в красивые карточки на странице
+// ===================================================
+function renderJobs(jobs) {
+  const list = document.getElementById('jobsList');
+
+  if (jobs.length === 0) {
+    list.innerHTML = `
+      <div style="text-align:center;padding:40px;color:var(--muted)">
+        <div style="font-size:32px;margin-bottom:12px">🔍</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px">Вакансии не найдены</div>
+        <div style="font-size:13px">Попробуйте изменить фильтры</div>
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = jobs.map((j, i) => {
+    // Форматируем зарплату
+    const salary = formatSalary(j.salary_from, j.salary_to);
+    // Иконка категории
+    const icon = categoryIcons[j.category] || '🚗';
+    // Время публикации
+    const time = formatTime(j.created_at);
+    // Источник вакансии
+    const isDemo = j.source_name === 'Демо';
+
+    return `
+      <div class="job-card ${i === 0 ? 'featured' : ''}"
+           onclick="openJob(${i})"
+           style="animation-delay:${i * 0.05}s">
+        <div class="job-top">
+          <div class="job-left">
+            <div class="co-avatar">${icon}</div>
+            <div>
+              <div class="job-company">${j.company || 'Компания'} · ${j.city || 'Россия'}</div>
+              <div class="job-title">${j.title}</div>
+            </div>
+          </div>
+          <div class="job-salary">${salary}</div>
+        </div>
+        <div class="job-tags">
+          ${j.category ? `<span class="tag blue">${j.category}</span>` : ''}
+          ${i === 0 ? '<span class="tag feat">⭐ Топ вакансия</span>' : ''}
+          ${isDemo ? '<span class="tag" style="opacity:0.5">Демо</span>' : ''}
+        </div>
+        <div class="job-footer">
+          <div class="job-loc">📍 ${j.city || 'Россия'}</div>
+          <div class="job-time">${time}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ===================================================
+// ФОРМАТИРОВАНИЕ ЗАРПЛАТЫ
+// Примеры: "120 000 – 150 000 ₽" или "до 150 000 ₽"
+// ===================================================
+function formatSalary(from, to) {
+  if (!from && !to) return '<small style="color:var(--muted)">По договорённости</small>';
+  if (from && to) return `${(from/1000).toFixed(0)}–${(to/1000).toFixed(0)}<br><small>тыс ₽/мес</small>`;
+  if (from) return `от ${(from/1000).toFixed(0)}<br><small>тыс ₽/мес</small>`;
+  if (to) return `до ${(to/1000).toFixed(0)}<br><small>тыс ₽/мес</small>`;
+}
+
+// ===================================================
+// ФОРМАТИРОВАНИЕ ВРЕМЕНИ
+// Превращает дату в "2 часа назад", "Вчера" и т.д.
+// ===================================================
+function formatTime(dateStr) {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diff = Math.floor((now - date) / 1000 / 60); // минуты
+  if (diff < 60) return `${diff} мин назад`;
+  if (diff < 1440) return `${Math.floor(diff/60)} ч назад`;
+  if (diff < 2880) return 'Вчера';
+  return `${Math.floor(diff/1440)} дн назад`;
+}
 
 // ===================================================
 // ОТКРЫТЬ ВАКАНСИЮ В МОДАЛЬНОМ ОКНЕ
 // ===================================================
 function openJob(i) {
-  const j = jobs[i];
+  const j = allJobs[i];
+  const salary = formatSalary(j.salary_from, j.salary_to);
+  const icon = categoryIcons[j.category] || '🚗';
+  const reqs = j.requirements ? j.requirements.split('\n').filter(r => r.trim()) : [];
+
   document.getElementById('jobModalInner').innerHTML = `
     <div class="modal-head">
       <div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:5px">${j.company} · ${j.location}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px">${j.company || 'Компания'} · ${j.city || 'Россия'}</div>
         <div style="font-size:18px;font-weight:800;line-height:1.2">${j.title}</div>
       </div>
       <button class="modal-close" onclick="document.getElementById('jobModal').classList.remove('open')">✕</button>
     </div>
-    <div class="modal-salary">${j.salary}</div>
+    <div class="modal-salary">${salary}</div>
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px">
-      ${j.tags.map(t=>`<span class="tag blue">${t}</span>`).join('')}
-      <span class="tag ai">🤖 ИИ-проверено</span>
+      ${j.category ? `<span class="tag blue">${j.category}</span>` : ''}
+      ${j.source_name && j.source_name !== 'Демо' ? `<span class="tag">📌 ${j.source_name}</span>` : ''}
     </div>
-    <p class="modal-desc">${j.desc}</p>
+    <p class="modal-desc">${j.description || 'Описание не указано'}</p>
+    ${reqs.length > 0 ? `
     <div class="modal-reqs">
       <h4>Требования</h4>
-      <ul class="req-list">${j.reqs.map(r=>`<li>${r}</li>`).join('')}</ul>
-    </div>
+      <ul class="req-list">${reqs.map(r=>`<li>${r}</li>`).join('')}</ul>
+    </div>` : ''}
     <button class="btn-apply" onclick="alert('✅ Отклик отправлен! Работодатель свяжется с вами в течение 24 часов.');document.getElementById('jobModal').classList.remove('open')">
       Откликнуться на вакансию →
     </button>
   `;
   document.getElementById('jobModal').classList.add('open');
 }
+
+// Запускаем загрузку вакансий когда страница открылась
+document.addEventListener('DOMContentLoaded', loadJobs);
 
 // ===================================================
 // ПЕРЕКЛЮЧЕНИЕ СТРАНИЦ (Главная / Работодателям)
