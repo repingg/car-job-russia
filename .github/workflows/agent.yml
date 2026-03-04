@@ -1,0 +1,35 @@
+name: ИИ-агент Car Job Russia
+
+# Когда запускать агента:
+on:
+  schedule:
+    - cron: '0 */2 * * *'  # каждые 2 часа автоматически
+  workflow_dispatch:         # или вручную нажав кнопку на GitHub
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest  # запускаем на сервере GitHub (бесплатно)
+    
+    steps:
+      # Шаг 1: Скачиваем наш код с GitHub
+      - name: Скачиваем код
+        uses: actions/checkout@v3
+      
+      # Шаг 2: Устанавливаем Python
+      - name: Устанавливаем Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      # Шаг 3: Устанавливаем нужные библиотеки
+      - name: Устанавливаем библиотеки
+        run: pip install requests
+      
+      # Шаг 4: Запускаем агента
+      # Секретные ключи берутся из настроек GitHub (Secrets)
+      - name: Запускаем агента
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python agent.py
